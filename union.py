@@ -132,6 +132,32 @@ def lambda_handler(event, context):
     # Wait a random amount of time.  This is a poor-mans back-off if a lot of instances are launched all at once.
     time.sleep(random.random())
 
+    # Loop through the instance's tags looking for DDNS tags (swhite)
+    for tag in tags:
+        if 'DDNS' in tag.get('Key',{}).lstrip().upper():
+            ddns = tag.get('Value').strip().lower()
+            if not ddns.endswith("."):
+                ddns += "."
+            print "DDNS request found:", ddns
+            if is_valid_hostname(ddns):
+                public_host_name, public_hosted_zone_name = ddns.split(".", 1)
+                if public_hosted_zone_name in public_hosted_zones_collection:
+                    print 'Public zone found', public_hosted_zone_name
+                    public_hosted_zone_id = get_zone_id(public_hosted_zone_name)
+                    # create A record in public zone
+                    if state =='running':
+                        try:
+                            create_resource_record(public_hosted_zone_id, public_host_name, public_hosted_zone_name, 'A', public_ip)
+                        except BaseException as e:
+                            print e
+                    else:
+                        try:
+                            delete_resource_record(public_hosted_zone_id, public_host_name, public_hosted_zone_name, 'A', public_ip)
+                        except BaseException as e:
+                            print e
+                else:
+                    print 'No matching zone found for %s' % public_hosted_zone_name
+
     # Loop through the instance's tags, looking for the zone and cname tags.  If either of these tags exist, check
     # to make sure that the name is valid.  If it is and if there's a matching zone in DNS, create A and PTR records.
     for tag in tags:
